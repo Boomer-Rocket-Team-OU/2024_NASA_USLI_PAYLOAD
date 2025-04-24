@@ -13,8 +13,11 @@ This repository contains all code intended for the 2024 NASA USLI payload challe
 ## Software Setup
 
 Needed Software
+
     - Arduino IDE
+
 Needed Libaries
+
     - Wire.h
     - Adafruit MPL3115A2.h
     - SparkFun_BNO080_Arduino_Library.h
