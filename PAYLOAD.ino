@@ -98,3 +98,10 @@ void loop() {
       Serial1.print("F APOGEE ");
       Serial1.print(apogeeFT, 0);
       Serial1.print("FT VMAX ");
+      Serial1.print(maxVelocity, 1);
+      Serial1.print("FT/S BATT ");
+      Serial1.print(landingBatteryV, 2);
+      Serial1.println("V");
+    }
+  }
+}
