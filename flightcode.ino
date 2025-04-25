@@ -75,9 +75,14 @@ void setup() {
 
   // === Wait for launch ===
   Serial.println("🕒 Waiting for Z-accel > 2g to begin logging...");
+  pinMode(13, OUTPUT);
 }
 
 void loop() {
+  digitalWrite(13, HIGH);   // set the LED on
+  delay(1000);                  // wait for a second
+  digitalWrite(13, LOW);    // set the LED off
+  delay(1000);
   if (!logging && imu.dataAvailable()) {
     float az = imu.getLinAccelZ();      // in m/s²
     float gZ = az / 9.81;               // convert to g
