@@ -98,4 +98,3 @@ void loop() {
       Serial1.print("F APOGEE ");
       Serial1.print(apogeeFT, 0);
       Serial1.print("FT VMAX ");
-... (10 lines left)
