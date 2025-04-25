@@ -14,7 +14,7 @@ BNO080 imu;                                    // I2C2 (pins 25/24)
 #define ADC_REF_VOLTAGE 3.3
 #define ADC_RESOLUTION 1023.0
 #define VOLTAGE_DIVIDER_RATIO 2.0
-#define ACCEL_THRESHOLD 6.0                    // Z-axis threshold in Gs
+#define ACCEL_THRESHOLD 0.1                      // Z-axis threshold in Gs
 
 // === Runtime Variables ===
 unsigned long launchTime = 0;
@@ -22,6 +22,7 @@ unsigned long lastSampleTime = 0;
 float lastAltitudeFT = 0.0;
 float baseAltitudeFT = 0.0;
 bool logging = false;
+bool launchMessagePrinted = false;
 
 // === Final Flight Data ===
 float maxVelocity = 0.0;
@@ -30,34 +31,36 @@ float landingTempF = 0.0;
 float landingBatteryV = 0.0;
 
 void setup() {
-  Serial.begin(115200);       // USB debug
-  Serial1.begin(9600);        // UART to Pi on pins 0 (RX), 1 (TX)
-  while (!Serial) delay(10);  // Wait for Serial monitor
+  pinMode(13, OUTPUT);
+  digitalWrite(13, HIGH);   // LED ON
+  delay(2000);              // Hold ON for 2 seconds
+  digitalWrite(13, LOW);    // LED OFF
 
-  Serial.println("🚀 Test Mode");
+  Serial1.begin(9600);      // UART to Pi on pins 0 (RX), 1 (TX)
+  Serial1.println("🚀 Test Mode");
 
   // === Initialize MPL3115A2 on I2C0 ===
   Wire.begin();
   if (!baro.begin(&Wire)) {
-    Serial.println("❌ MPL3115A2 not detected.");
+    Serial1.println("❌ MPL3115A2 not detected.");
     while (1);
   } else {
-    Serial.println("✅ MPL3115A2 OK.");
+    Serial1.println("✅ MPL3115A2 OK.");
   }
 
   // === Initialize BNO085 on I2C2 ===
   Wire2.begin();  // SDA2 = pin 25, SCL2 = pin 24
   if (!imu.begin(0x4A, Wire2)) {
-    Serial.println("❌ BNO085 not detected on I2C2.");
+    Serial1.println("❌ BNO085 not detected on I2C2.");
     while (1);
   } else {
-    Serial.println("✅ BNO085 OK.");
+    Serial1.println("✅ BNO085 OK.");
   }
 
   imu.enableLinearAccelerometer(50);  // 50 Hz
 
   // === Calibrate base altitude ===
-  Serial.print("📡 Calibrating launchpad altitude...");
+  Serial1.print("📡 Calibrating launchpad altitude...");
   delay(1000);
 
   float sum = 0;
@@ -69,29 +72,27 @@ void setup() {
   baseAltitudeFT = (sum / samples) * 3.28084;
   lastAltitudeFT = 0.0;
 
-  Serial.print(" Done. Launchpad = ");
-  Serial.print(baseAltitudeFT);
-  Serial.println(" ft");
+  Serial1.print(" Done. Launchpad = ");
+  Serial1.print(baseAltitudeFT);
+  Serial1.println(" ft");
 
-  // === Wait for launch ===
-  Serial.println("🕒 Waiting for Z-accel > 2g to begin logging...");
-  pinMode(13, OUTPUT);
+  // === Initial one-time message ===
+  Serial1.println("🕒 Waiting for Z-accel > 7g to begin logging...");
 }
 
 void loop() {
-  digitalWrite(13, HIGH);   // set the LED on
-  delay(1000);                  // wait for a second
-  digitalWrite(13, LOW);    // set the LED off
-  delay(1000);
+  digitalWrite(13, !digitalRead(13));  // Blink LED
+  delay(500);
+
   if (!logging && imu.dataAvailable()) {
-    float az = imu.getLinAccelZ();      // in m/s²
-    float gZ = az / 9.81;               // convert to g
+    float az = imu.getLinAccelZ();  // m/s²
+    float gZ = az / 9.81;
 
     if (fabs(gZ) > ACCEL_THRESHOLD) {
       logging = true;
       launchTime = millis();
       lastSampleTime = launchTime;
-      Serial.println("🚀 Launch detected! Logging started...");
+      Serial1.println("🚀 Launch detected! Logging started...");
     }
   }
 
@@ -99,7 +100,6 @@ void loop() {
     unsigned long currentTime = millis();
 
     if (currentTime - lastSampleTime >= SAMPLE_INTERVAL) {
-      // Read sensors
       float rawAltitudeFT = baro.getAltitude() * 3.28084;
       float altitudeFT = rawAltitudeFT - baseAltitudeFT;
       float tempC = baro.getTemperature();
@@ -113,7 +113,6 @@ void loop() {
       float rawVoltage = (analogVal / ADC_RESOLUTION) * ADC_REF_VOLTAGE;
       float batteryVoltage = rawVoltage * VOLTAGE_DIVIDER_RATIO;
 
-      // Track peak data
       if (velocityFTS > maxVelocity) maxVelocity = velocityFTS;
       if (altitudeFT > apogeeFT) apogeeFT = altitudeFT;
       landingTempF = tempF;
@@ -122,7 +121,6 @@ void loop() {
       lastSampleTime = currentTime;
     }
 
-    // Final UART Summary
     if (currentTime - launchTime >= LAUNCH_DURATION) {
       Serial1.println("✅ Mission complete. Sending summary via UART...");
 
@@ -136,8 +134,8 @@ void loop() {
       Serial1.print(landingBatteryV, 2);
       Serial1.println("V");
 
-      Serial1.println("🛰️ Data sent to Pi. Freezing...");
-      while (1);  // Freeze system after sending
+      Serial1.println("🛰️ Data sent. Freezing system.");
+      while (1);
     }
   }
 }
