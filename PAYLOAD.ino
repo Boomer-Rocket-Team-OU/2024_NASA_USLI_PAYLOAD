@@ -5,15 +5,16 @@
 
 // === Sensors ===
 Adafruit_MPL3115A2 baro;                       // I2C0 (pins 18/19)
-BNO080 imu;                                    // I2C1 (pins 37/38)
+BNO080 imu;                                    // I2C2 (pins 25/24)
 
 // === Constants ===
 #define SAMPLE_INTERVAL 1000                   // 1 second
-#define LAUNCH_DURATION 240000                 // 4 minutes
+#define LAUNCH_DURATION 3000                   // 3 seconds for test (change to 240000 for 4 min)
 #define BATTERY_PIN A0
 #define ADC_REF_VOLTAGE 3.3
 #define ADC_RESOLUTION 1023.0
 #define VOLTAGE_DIVIDER_RATIO 2.0
+#define ACCEL_THRESHOLD 0.1554 
 
 // === Runtime Variables ===
 unsigned long launchTime = 0;
@@ -29,34 +30,24 @@ float landingTempF = 0.0;
 float landingBatteryV = 0.0;
 
 void setup() {
-  Serial.begin(115200);
-  while (!Serial) delay(10);
-  Serial.println("🚀 Test Mode");
+  Serial1.begin(9600);  // UART to Pi on pins 0 (RX), 1 (TX)
 
-  // Initialize MPL3115A2
+  // === Initialize MPL3115A2 on I2C0 ===
   Wire.begin();
   if (!baro.begin(&Wire)) {
-    Serial.println("❌ MPL3115A2 not detected.");
-    while (1);
-  } else {
-    Serial.println("✅ MPL3115A2 OK.");
+    while (1);  // Freeze if baro sensor not found
   }
 
-  // Initialize BNO085
-  Wire1.begin();
-  if (!imu.begin(0x4A, Wire1)) {
-    Serial.println("❌ BNO085 not detected on I2C1.");
-    while (1);
-  } else {
-    Serial.println("✅ BNO085 OK.");
+  // === Initialize BNO085 on I2C2 ===
+  Wire2.begin();  // SDA2 = pin 25, SCL2 = pin 24
+  if (!imu.begin(0x4A, Wire2)) {
+    while (1);  // Freeze if IMU not found
   }
 
   imu.enableLinearAccelerometer(50);  // 50 Hz
 
-  // Calibrate base altitude
-  Serial.print("📡 Calibrating launchpad altitude...");
+  // === Calibrate base altitude ===
   delay(1000);
-
   float sum = 0;
   int samples = 10;
   for (int i = 0; i < samples; i++) {
@@ -66,15 +57,10 @@ void setup() {
   baseAltitudeFT = (sum / samples) * 3.28084;
   lastAltitudeFT = 0.0;
 
-  Serial.print(" Done. Launchpad = ");
-  Serial.print(baseAltitudeFT);
-  Serial.println(" ft");
-
-  // Start logging
+  // === Start logging ===
   logging = true;
   launchTime = millis();
   lastSampleTime = launchTime;
-  Serial.println("🚀 Logging started...");
 }
 
 void loop() {
@@ -105,21 +91,11 @@ void loop() {
       lastSampleTime = currentTime;
     }
 
-    // Final APRS-style summary
+    // Final UART Summary
     if (currentTime - launchTime >= LAUNCH_DURATION) {
-      Serial.println("✅ Mission complete. Sending summary...");
-
-      Serial.print("OUPAYLOAD: TEMP ");
-      Serial.print(landingTempF, 1);
-      Serial.print("F APOGEE ");
-      Serial.print(apogeeFT, 0);
-      Serial.print("FT VMAX ");
-      Serial.print(maxVelocity, 1);
-      Serial.print("FT/S BATT ");
-      Serial.print(landingBatteryV, 2);
-      Serial.println("V");
-
-      while (1);  // Freeze system after sending
-    }
-  }
-}
+      Serial1.print("OUPAYLOAD: TEMP ");
+      Serial1.print(landingTempF, 1);
+      Serial1.print("F APOGEE ");
+      Serial1.print(apogeeFT, 0);
+      Serial1.print("FT VMAX ");
+... (10 lines left)
