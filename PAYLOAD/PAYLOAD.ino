@@ -14,7 +14,7 @@ BNO080 imu;                                    // I2C2 (pins 25/24)
 #define ADC_REF_VOLTAGE 3.3
 #define ADC_RESOLUTION 1023.0
 #define VOLTAGE_DIVIDER_RATIO 2.0
-#define ACCEL_THRESHOLD 0.1                    // Z-axis threshold in Gs
+#define ACCEL_THRESHOLD 0.1554 
 
 // === Runtime Variables ===
 unsigned long launchTime = 0;
@@ -30,26 +30,24 @@ float landingTempF = 0.0;
 float landingBatteryV = 0.0;
 
 void setup() {
-  pinMode(13, OUTPUT);
-  digitalWrite(13, HIGH);   // LED ON
-  delay(2000);              // Hold ON for 2 seconds
-  digitalWrite(13, LOW);    // LED OFF
+  Serial.begin(9600);  // UART to Pi on pins 0 (RX), 1 (TX)
 
-  Serial1.begin(9600);      // UART to Pi on pins 0 (RX), 1 (TX)
-
+  // === Initialize MPL3115A2 on I2C0 ===
   Wire.begin();
   if (!baro.begin(&Wire)) {
-    while (1);  // Halt if barometer not detected
+    while (1);  // Freeze if baro sensor not found
   }
 
+  // === Initialize BNO085 on I2C2 ===
   Wire2.begin();  // SDA2 = pin 25, SCL2 = pin 24
   if (!imu.begin(0x4A, Wire2)) {
-    while (1);  // Halt if IMU not detected
+    while (1);  // Freeze if IMU not found
   }
 
   imu.enableLinearAccelerometer(50);  // 50 Hz
 
-  // Calibrate base altitude
+  // === Calibrate base altitude ===
+  delay(1000);
   float sum = 0;
   int samples = 10;
   for (int i = 0; i < samples; i++) {
@@ -58,27 +56,24 @@ void setup() {
   }
   baseAltitudeFT = (sum / samples) * 3.28084;
   lastAltitudeFT = 0.0;
+
+  // === Start logging ===
+  logging = true;
+  launchTime = millis();
+  lastSampleTime = launchTime;
+  pinMode(13, OUTPUT);
 }
 
 void loop() {
-  digitalWrite(13, !digitalRead(13));  // Blink LED
-  delay(500);
-
-  if (!logging && imu.dataAvailable()) {
-    float az = imu.getLinAccelZ();  // m/s²
-    float gZ = az / 9.81;
-
-    if (fabs(gZ) > ACCEL_THRESHOLD) {
-      logging = true;
-      launchTime = millis();
-      lastSampleTime = launchTime;
-    }
-  }
-
+  digitalWrite(13, HIGH);   // set the LED on
+  delay(1000);                  // wait for a second
+  digitalWrite(13, LOW);    // set the LED off
+  delay(1000);
   if (logging && imu.dataAvailable()) {
     unsigned long currentTime = millis();
 
     if (currentTime - lastSampleTime >= SAMPLE_INTERVAL) {
+      // Read sensors
       float rawAltitudeFT = baro.getAltitude() * 3.28084;
       float altitudeFT = rawAltitudeFT - baseAltitudeFT;
       float tempC = baro.getTemperature();
@@ -92,6 +87,7 @@ void loop() {
       float rawVoltage = (analogVal / ADC_RESOLUTION) * ADC_REF_VOLTAGE;
       float batteryVoltage = rawVoltage * VOLTAGE_DIVIDER_RATIO;
 
+      // Track peak data
       if (velocityFTS > maxVelocity) maxVelocity = velocityFTS;
       if (altitudeFT > apogeeFT) apogeeFT = altitudeFT;
       landingTempF = tempF;
@@ -100,19 +96,17 @@ void loop() {
       lastSampleTime = currentTime;
     }
 
+    // Final UART Summary
     if (currentTime - launchTime >= LAUNCH_DURATION) {
-
-      Serial1.print("OUPAYLOAD: TEMP ");
-      Serial1.print(landingTempF, 1);
-      Serial1.print("F APOGEE ");
-      Serial1.print(apogeeFT, 0);
-      Serial1.print("FT VMAX ");
-      Serial1.print(maxVelocity, 1);
-      Serial1.print("FT/S BATT ");
-      Serial1.print(landingBatteryV, 2);
-      Serial1.println("V");
-
-      while (1);
+      Serial.print("OUPAYLOAD: TEMP ");
+      Serial.print(landingTempF, 1);
+      Serial.print("F APOGEE ");
+      Serial.print(apogeeFT, 0);
+      Serial.print("FT VMAX ");
+      Serial.print(maxVelocity, 1);
+      Serial.print("FT/S BATT ");
+      Serial.print(landingBatteryV, 2);
+      Serial.print("V");
     }
   }
 }
